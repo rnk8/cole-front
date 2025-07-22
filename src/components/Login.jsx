@@ -100,7 +100,7 @@ const Login = () => {
           <motion.button 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => loginAsTestUser({ username: 'padre1', password: 'padre123' })}
+            onClick={() => loginAsTestUser({ username: 'olalla.arellano', password: 'padre123' })}
             className="bg-card text-text px-4 py-2 rounded-lg shadow-sm border text-sm font-semibold hover:bg-gray-50 transition-colors"
           >
             👨‍👩‍👧‍👦 Ingresar como Padre

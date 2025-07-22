@@ -460,7 +460,7 @@ const MateriaCard = ({ materia, isOpen, onToggle }) => {
       className="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-shadow"
     >
       <CardHeader 
-        onClick={() => onToggle(materia.id, materia.id)} 
+        onClick={onToggle} 
         className="cursor-pointer flex flex-row justify-between items-center p-5 bg-gradient-to-r from-gray-50 to-blue-50 border-b"
       >
         <CardTitle className="flex items-center gap-3 text-lg text-gray-800">
@@ -602,37 +602,44 @@ const DetalleHijo = () => {
   const periodoSeleccionado = searchParams.get('periodo');
 
   const handleMateriaToggle = (materiaId, index) => {
-    const newOpenMaterias = new Set(openMaterias);
-    const materias = hijo?.materias;
-    if (!materias) return;
+    setOpenMaterias(currentOpenMaterias => {
+      const newOpenMaterias = new Set(currentOpenMaterias);
+      const materias = hijo?.materias;
+      if (!materias) return newOpenMaterias;
 
-    let adjacentMateriaId = null;
+      let adjacentMateriaId = null;
 
-    // Determinar la materia adyacente en una cuadrícula de 2 columnas
-    if (index % 2 === 0) { // Índice par
-      if (index + 1 < materias.length) {
-        adjacentMateriaId = materias[index + 1].id;
+      // Determinar la materia adyacente en una cuadrícula de 2 columnas
+      if (index % 2 === 0) { // Índice par (columna izquierda)
+        if (index + 1 < materias.length) {
+          adjacentMateriaId = materias[index + 1].id;
+        }
+      } else { // Índice impar (columna derecha)
+        adjacentMateriaId = materias[index - 1].id;
       }
-    } else { // Índice impar
-      adjacentMateriaId = materias[index - 1].id;
-    }
 
-    const isCurrentlyOpen = newOpenMaterias.has(materiaId);
+      const isCurrentlyOpen = newOpenMaterias.has(materiaId);
 
-    if (isCurrentlyOpen) {
-      newOpenMaterias.delete(materiaId);
-      if (adjacentMateriaId) newOpenMaterias.delete(adjacentMateriaId);
-    } else {
-      newOpenMaterias.add(materiaId);
-      if (adjacentMateriaId) newOpenMaterias.add(adjacentMateriaId);
-    }
-
-    setOpenMaterias(newOpenMaterias);
+      if (isCurrentlyOpen) {
+        newOpenMaterias.delete(materiaId);
+        if (adjacentMateriaId) newOpenMaterias.delete(adjacentMateriaId);
+      } else {
+        newOpenMaterias.add(materiaId);
+        if (adjacentMateriaId) newOpenMaterias.add(adjacentMateriaId);
+      }
+      
+      return newOpenMaterias;
+    });
   };
 
   useEffect(() => {
+    // Reset component state when changing students for a clean transition
+    setHijo(null);
+    setLoading(true);
+    setOpenMaterias(new Set());
+    setError(null);
+
     const fetchDetalleHijo = async () => {
-      setLoading(true);
       try {
         const url = periodoSeleccionado 
           ? `/padre/hijo/${alumnoId}/?periodo=${periodoSeleccionado}` 
@@ -641,14 +648,17 @@ const DetalleHijo = () => {
         setHijo(response.data);
         
         if (!periodoSeleccionado && response.data.periodos_disponibles?.length > 0) {
-          setSearchParams({ periodo: response.data.periodos_disponibles[0] });
+          // Use replace to avoid polluting browser history
+          setSearchParams({ periodo: response.data.periodos_disponibles[0] }, { replace: true });
         }
       } catch (err) {
         setError('No se pudo cargar la información del alumno.');
+        setHijo(null); // Clear previous data on error
       } finally {
         setLoading(false);
       }
     };
+    
     fetchDetalleHijo();
   }, [alumnoId, periodoSeleccionado, setSearchParams]);
 
@@ -705,83 +715,102 @@ const DetalleHijo = () => {
         )}
       </motion.div>
 
-      <motion.div
-        key={periodoSeleccionado}
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
-        {loading || !hijo ? (
-          <LoadingSpinner />
-        ) : (
-          <>
-            {/* Navegación entre hermanos */}
-            <NavegacionHermanos navegacion={hijo.navegacion} hijoActualId={alumnoId} />
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={alumnoId} // This is crucial for AnimatePresence to detect component changes
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -15 }}
+          transition={{ duration: 0.3 }}
+        >
+          {loading ? (
+            <LoadingSpinner />
+          ) : error ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                {error}
+              </AlertDescription>
+            </Alert>
+          ) : hijo ? (
+            <>
+              {/* Navegación entre hermanos */}
+              <NavegacionHermanos navegacion={hijo.navegacion} hijoActualId={alumnoId} />
 
-            {/* Resumen de estadísticas */}
-            <ResumenEstadisticas estadisticas={hijo.estadisticas_periodo} />
+              {/* Resumen de estadísticas */}
+              <ResumenEstadisticas estadisticas={hijo.estadisticas_periodo} />
 
-            {/* Comparación con período anterior */}
-            <ComparacionPeriodos comparacion={hijo.comparacion_periodos} />
+              {/* Comparación con período anterior */}
+              <ComparacionPeriodos comparacion={hijo.comparacion_periodos} />
 
-            {/* Análisis de rendimiento */}
-            <AnalisisRendimiento analisis={hijo.analisis_rendimiento} />
+              {/* Análisis de rendimiento */}
+              <AnalisisRendimiento analisis={hijo.analisis_rendimiento} />
 
-            {/* Recomendaciones */}
-            <Recomendaciones recomendaciones={hijo.recomendaciones} />
+              {/* Recomendaciones */}
+              <Recomendaciones recomendaciones={hijo.recomendaciones} />
 
-            {/* Contenido principal: Asistencia y Materias */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Asistencia */}
-              <div className="lg:col-span-1">
-                <AsistenciaCard asistencias={hijo.asistencias} />
-              </div>
+              {/* Contenido principal: Asistencia y Materias */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Asistencia */}
+                <div className="lg:col-span-1">
+                  <AsistenciaCard asistencias={hijo.asistencias} />
+                </div>
 
-              {/* Materias */}
-              <div className="lg:col-span-2">
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                  {hijo.materias?.length > 0 ? (
-                    hijo.materias.map((materia, index) => (
-                      <MateriaCard 
-                        key={materia.id} 
-                        materia={materia} 
-                        isOpen={openMaterias.has(materia.id)}
-                        onToggle={() => handleMateriaToggle(materia.id, index)}
-                      />
-                    ))
-                  ) : (
-                    <div className="xl:col-span-2">
-                      <Card className="shadow-md">
-                        <CardContent className="p-8 text-center">
-                          <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                          <h3 className="text-lg font-semibold text-gray-600 mb-2">
-                            No hay materias registradas
-                          </h3>
-                          <p className="text-gray-500">
-                            Las materias aparecerán aquí cuando sean asignadas al curso.
-                          </p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
+                {/* Materias */}
+                <div className="lg:col-span-2">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {hijo.materias?.length > 0 ? (
+                      hijo.materias.map((materia, index) => (
+                        <MateriaCard 
+                          key={materia.id} 
+                          materia={materia} 
+                          isOpen={openMaterias.has(materia.id)}
+                          onToggle={() => handleMateriaToggle(materia.id, index)}
+                        />
+                      ))
+                    ) : (
+                      <div className="xl:col-span-2">
+                        <Card className="shadow-md">
+                          <CardContent className="p-8 text-center">
+                            <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                            <h3 className="text-lg font-semibold text-gray-600 mb-2">
+                              No hay materias registradas
+                            </h3>
+                            <p className="text-gray-500">
+                              Las materias aparecerán aquí cuando sean asignadas al curso.
+                            </p>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Mensaje informativo si no hay datos */}
-            {!hijo.periodos_disponibles?.length && (
-              <Alert className="mt-8 bg-blue-50 border-blue-200">
-                <Star className="h-5 w-5 text-blue-500"/>
-                <AlertTitle className="text-blue-800">Información Académica</AlertTitle>
-                <AlertDescription className="text-blue-700">
-                  Las calificaciones y evaluaciones aparecerán aquí cuando sean registradas por los maestros.
-                  El seguimiento académico se actualiza regularmente.
-                </AlertDescription>
-              </Alert>
-            )}
-          </>
-        )}
-      </motion.div>
+              {/* Mensaje informativo si no hay datos */}
+              {!hijo.periodos_disponibles?.length && (
+                <Alert className="mt-8 bg-blue-50 border-blue-200">
+                  <Star className="h-5 w-5 text-blue-500"/>
+                  <AlertTitle className="text-blue-800">Información Académica</AlertTitle>
+                  <AlertDescription className="text-blue-700">
+                    Las calificaciones y evaluaciones aparecerán aquí cuando sean registradas por los maestros.
+                    El seguimiento académico se actualiza regularmente.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          ) : (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                No se pudo cargar la información del alumno o no hay datos disponibles.
+              </AlertDescription>
+            </Alert>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 };
